@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -16,10 +17,12 @@ import (
 )
 
 type User struct {
-	ID     uint   `gorm:"primaryKey"`
-	UUID   string `gorm:"uniqueIndex"`
-	TgID   int64
-	Status string `gorm:"default:'active'"`
+	ID        uint       `gorm:"primaryKey" json:"id"`
+	UUID      string     `gorm:"uniqueIndex" json:"uuid"`
+	TgID      int64      `json:"tg_id"`
+	Status    string     `gorm:"default:'active'" json:"status"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at"`
 }
 
 var (
@@ -72,12 +75,27 @@ func main() {
 	})
 	app.Use(cors.New())
 
+	// Auth middleware
+	adminToken := os.Getenv("ADMIN_TOKEN")
+	authMiddleware := func(c *fiber.Ctx) error {
+		if adminToken == "" {
+			return c.Next() // Allow if no token configured
+		}
+		authHeader := c.Get("Authorization")
+		if authHeader != "Bearer "+adminToken {
+			return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		}
+		return c.Next()
+	}
+
 	// Routes
-	app.Post("/api/keys", handleCreateKey)
-	app.Delete("/api/keys/:uuid", handleDeleteKey)
-	app.Get("/api/logs/download", handleDownloadLogs)
-	app.Get("/api/users", handleListUsers)
 	app.Get("/api/health", handleHealth)
+
+	api := app.Group("/api", authMiddleware)
+	api.Post("/keys", handleCreateKey)
+	api.Delete("/keys/:uuid", handleDeleteKey)
+	api.Get("/logs/download", handleDownloadLogs)
+	api.Get("/users", handleListUsers)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
@@ -118,7 +136,13 @@ func syncUsersOnStartup() {
 
 func handleCreateKey(c *fiber.Ctx) error {
 	newUUID := uuid.New().String()
-	user := User{UUID: newUUID, Status: "active"}
+	exp := time.Now().AddDate(0, 1, 0) // default 30 days
+	user := User{
+		UUID:      newUUID,
+		Status:    "active",
+		CreatedAt: time.Now(),
+		ExpiresAt: &exp,
+	}
 
 	if err := db.Create(&user).Error; err != nil {
 		log.Printf("[ERROR] DB create: %v", err)

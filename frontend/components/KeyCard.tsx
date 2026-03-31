@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { KeyRound, Copy, Check, Loader2 } from 'lucide-react';
 
-export default function KeyCard() {
+export default function KeyCard({ token }: { token: string }) {
   const [vlessUrl, setVlessUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -16,7 +16,10 @@ export default function KeyCard() {
     try {
       const res = await fetch('/api/keys', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ tg_id: 0 }),
       });
       if (!res.ok) throw new Error('API server returned an error.');
