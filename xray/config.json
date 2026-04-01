@@ -6,6 +6,21 @@
     "tag": "api",
     "services": ["HandlerService", "StatsService", "RoutingService"]
   },
+  "stats": {},
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserUplink": true,
+        "statsUserDownlink": true
+      }
+    },
+    "system": {
+      "statsInboundUplink": true,
+      "statsInboundDownlink": true,
+      "statsOutboundUplink": true,
+      "statsOutboundDownlink": true
+    }
+  },
   "dns": {
     "servers": [
       "https+local://cloudflare-dns.com/dns-query",

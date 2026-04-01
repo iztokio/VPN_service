@@ -102,6 +102,7 @@ func main() {
 	api.Delete("/users", handleDeleteAllUsers)
 	api.Get("/logs/download", handleDownloadLogs)
 	api.Get("/users", handleListUsers)
+	api.Get("/stats", handleGetStats)
 
 	// Mobile App API v1 (Zero-Knowledge Auth)
 	v1 := app.Group("/v1")
@@ -212,6 +213,36 @@ func handleGetClientConfig(c *fiber.Ctx) error {
 		VlessGRPC: vlessGRPC,
 	})
 }
+
+func handleGetStats(c *fiber.Ctx) error {
+	var totalUsers int64
+	var activeUsers int64
+	db.Model(&User{}).Count(&totalUsers)
+	db.Model(&User{}).Where("status = ? AND (expires_at IS NULL OR expires_at > ?)", "active", time.Now()).Count(&activeUsers)
+
+	userTraffic, sysStats, err := xrayManager.GetTrafficStats()
+	if err != nil {
+		log.Printf("[STATS] GetTrafficStats error: %v", err)
+		// Return partial data even if Xray stats fail
+		return c.JSON(fiber.Map{
+			"total_users":         totalUsers,
+			"active_users":        activeUsers,
+			"user_traffic":        []interface{}{},
+			"total_uplink_bytes":  int64(0),
+			"total_downlink_bytes": int64(0),
+			"stats_error":         err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"total_users":          totalUsers,
+		"active_users":         activeUsers,
+		"user_traffic":         userTraffic,
+		"total_uplink_bytes":   sysStats.TotalUplink,
+		"total_downlink_bytes": sysStats.TotalDownlink,
+	})
+}
+
 
 func handleCreateKey(c *fiber.Ctx) error {
 	newUUID := uuid.New().String()
