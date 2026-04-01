@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -46,14 +45,8 @@ type CreateKeyResponse struct {
 }
 
 func main() {
-	// Setup file + stdout logging
-	logFile, err := os.OpenFile("/app/data/app.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-	defer logFile.Close()
-	multiWriter := io.MultiWriter(os.Stdout, logFile)
-	log.SetOutput(multiWriter)
+	// Setup stdout logging only (Security Phase 3.3: Disable persistent disk logging)
+	log.SetOutput(os.Stdout)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	log.Println("[STARTUP] VPN Backend starting...")

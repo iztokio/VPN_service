@@ -6,6 +6,14 @@
     "tag": "api",
     "services": ["HandlerService", "StatsService", "RoutingService"]
   },
+  "dns": {
+    "servers": [
+      "https+local://cloudflare-dns.com/dns-query",
+      "1.1.1.1",
+      "8.8.8.8",
+      "localhost"
+    ]
+  },
   "inbounds": [
     {
       "tag": "vless-in",
