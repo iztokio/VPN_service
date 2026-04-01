@@ -47,6 +47,41 @@
       }
     },
     {
+      "tag": "vless-grpc-ru",
+      "listen": "0.0.0.0",
+      "port": 8443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "vk.com:443",
+          "xver": 0,
+          "serverNames": [
+            "vk.com",
+            "m.vk.com",
+            "api.vk.com"
+          ],
+          "privateKey": "SERVER_PRIVATE_KEY",
+          "shortIds": ["SERVER_SHORT_ID"],
+          "fingerprint": "chrome"
+        },
+        "grpcSettings": {
+          "serviceName": "VpnService"
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
+      }
+    },
+    {
       "tag": "api-in",
       "listen": "0.0.0.0",
       "port": 10085,

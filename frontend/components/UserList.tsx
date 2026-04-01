@@ -48,6 +48,29 @@ export default function UserList({ token }: { token: string }) {
     }
   };
 
+  const handleRevokeAll = async () => {
+    if (!confirm('Are you ABSOLUTELY sure you want to delete ALL users? This cannot be undone.')) return;
+    try {
+      const res = await fetch(`/api/users`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        fetchUsers();
+      } else {
+        alert('Failed to revoke all keys');
+      }
+    } catch (e) {
+      alert('Error revoking all keys');
+    }
+  };
+
+  const copyClientUrl = (uuid: string) => {
+    const url = `http://${window.location.hostname}:8080/client/${uuid}`;
+    navigator.clipboard.writeText(url);
+    alert('Client Link copied! Send this to the user.');
+  };
+
   useEffect(() => {
     if (token) fetchUsers();
   }, [token]);
@@ -56,11 +79,21 @@ export default function UserList({ token }: { token: string }) {
 
   return (
     <div className="space-y-3 mt-8">
-      <h3 className="text-lg font-medium text-white px-2">Active Users ({users.length})</h3>
+      <div className="flex justify-between items-center px-2">
+        <h3 className="text-lg font-medium text-white">Active Users ({users.length})</h3>
+        {users.length > 0 && (
+          <button 
+            onClick={handleRevokeAll}
+            className="px-3 py-1.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg text-xs font-semibold transition"
+          >
+            Delete All
+          </button>
+        )}
+      </div>
       {users.length === 0 ? (
         <div className="text-slate-500 text-sm p-4 text-center bg-slate-900/50 rounded-xl border border-slate-800">No active users</div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
           {users.map(u => (
             <div key={u.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl hover:bg-slate-800/60 transition-colors">
               <div className="flex flex-col">
@@ -70,13 +103,21 @@ export default function UserList({ token }: { token: string }) {
                   Exp: {u.expires_at ? new Date(u.expires_at).toLocaleDateString() : 'Never'}
                 </div>
               </div>
-              <button
-                onClick={() => handleRevoke(u.uuid)}
-                className="mt-2 sm:mt-0 p-2 text-rose-500/70 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
-                title="Revoke Key"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                <button
+                  onClick={() => copyClientUrl(u.uuid)}
+                  className="px-3 py-1.5 text-xs text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500 hover:text-white rounded-lg transition-colors border border-indigo-500/20"
+                >
+                  Copy Portal Link
+                </button>
+                <button
+                  onClick={() => handleRevoke(u.uuid)}
+                  className="p-2.5 text-rose-500/70 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                  title="Revoke Key"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
         </div>

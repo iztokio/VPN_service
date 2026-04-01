@@ -5,7 +5,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { KeyRound, Copy, Check, Loader2 } from 'lucide-react';
 
 export default function KeyCard({ token }: { token: string }) {
-  const [vlessUrl, setVlessUrl] = useState<string | null>(null);
+  const [clientUrl, setClientUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
@@ -24,7 +24,7 @@ export default function KeyCard({ token }: { token: string }) {
       });
       if (!res.ok) throw new Error('API server returned an error.');
       const data = await res.json();
-      setVlessUrl(data.vless_url);
+      setClientUrl(data.client_url);
     } catch (err) {
       setError('Failed. Check console.');
     } finally {
@@ -33,19 +33,9 @@ export default function KeyCard({ token }: { token: string }) {
   };
 
   const copyToClipboard = () => {
-    if (!vlessUrl) return;
+    if (!clientUrl) return;
     try {
-      const el = document.createElement('textarea');
-      el.value = vlessUrl;
-      el.style.position = 'fixed';
-      el.style.left = '-9999px';
-      el.style.top = '-9999px';
-      el.style.opacity = '0';
-      document.body.appendChild(el);
-      el.focus();
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
+      navigator.clipboard.writeText(clientUrl);
     } catch (e) {
       console.error('Copy failed:', e);
     }
@@ -57,7 +47,7 @@ export default function KeyCard({ token }: { token: string }) {
     <div className="bg-[#121214] border border-white/5 rounded-3xl p-6 shadow-2xl relative overflow-hidden group">
       <div className="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl transition-opacity group-hover:bg-indigo-500/20"></div>
 
-      {!vlessUrl ? (
+      {!clientUrl ? (
         <div className="flex flex-col items-center justify-center py-8 space-y-6 relative z-10 animate-in fade-in duration-500">
           <button
             onClick={generateKey}

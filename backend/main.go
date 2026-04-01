@@ -40,10 +40,6 @@ var (
 	xrayManager *XrayManager
 )
 
-type CreateKeyResponse struct {
-	VlessURL string `json:"vless_url"`
-}
-
 func main() {
 	// Setup stdout logging only (Security Phase 3.3: Disable persistent disk logging)
 	log.SetOutput(os.Stdout)
@@ -95,10 +91,14 @@ func main() {
 	// Routes
 	app.Get("/api/health", handleHealth)
 
+	// Public Client Portal API
+	app.Get("/api/client/:uuid", handleGetClientConfig)
+
 	// Panel API (Protected)
 	api := app.Group("/api", authMiddleware)
 	api.Post("/keys", handleCreateKey)
 	api.Delete("/keys/:uuid", handleDeleteKey)
+	api.Delete("/users", handleDeleteAllUsers)
 	api.Get("/logs/download", handleDownloadLogs)
 	api.Get("/users", handleListUsers)
 
@@ -168,6 +168,50 @@ func syncUsersOnStartup() {
 	log.Printf("[SYNC] Synced %d/%d active users to Xray", synced, len(users))
 }
 
+type CreateKeyResponse struct {
+	ClientURL string `json:"client_url"`
+	VlessTCP  string `json:"vless_tcp"`
+	VlessGRPC string `json:"vless_grpc"`
+}
+
+type ClientStatusResponse struct {
+	UUID      string     `json:"uuid"`
+	Status    string     `json:"status"`
+	ExpiresAt *time.Time `json:"expires_at"`
+	VlessTCP  string     `json:"vless_tcp"`
+	VlessGRPC string     `json:"vless_grpc"`
+}
+
+func handleGetClientConfig(c *fiber.Ctx) error {
+	reqUUID := c.Params("uuid")
+	var user User
+	if err := db.Where("uuid = ?", reqUUID).First(&user).Error; err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "Client not found"})
+	}
+
+	serverIP := os.Getenv("SERVER_IP")
+	pubKey := os.Getenv("REALITY_PUBLIC_KEY")
+	shortID := os.Getenv("REALITY_SHORT_ID")
+
+	vlessTCP := fmt.Sprintf(
+		"vless://%s@%s:443?type=tcp&security=reality&pbk=%s&fp=chrome&sni=addons.mozilla.org&sid=%s&spx=%%2F&flow=xtls-rprx-vision#VPN-Standard-%s",
+		user.UUID, serverIP, pubKey, shortID, user.UUID[:4],
+	)
+
+	vlessGRPC := fmt.Sprintf(
+		"vless://%s@%s:8443?type=grpc&security=reality&pbk=%s&fp=chrome&sni=vk.com&sid=%s&serviceName=VpnService#VPN-Stealth-RU-%s",
+		user.UUID, serverIP, pubKey, shortID, user.UUID[:4],
+	)
+
+	return c.JSON(ClientStatusResponse{
+		UUID:      user.UUID,
+		Status:    user.Status,
+		ExpiresAt: user.ExpiresAt,
+		VlessTCP:  vlessTCP,
+		VlessGRPC: vlessGRPC,
+	})
+}
+
 func handleCreateKey(c *fiber.Ctx) error {
 	newUUID := uuid.New().String()
 	exp := time.Now().AddDate(0, 1, 0) // default 30 days
@@ -189,33 +233,72 @@ func handleCreateKey(c *fiber.Ctx) error {
 		return c.Status(500).SendString("xray error: " + err.Error())
 	}
 
-	vlessURL := fmt.Sprintf(
-		// SNI must match one of the serverNames in xray/config.json realitySettings
-		// fp=chrome is the most natural TLS fingerprint for Reality obfuscation
-		"vless://%s@%s:443?type=tcp&security=reality&pbk=%s&fp=chrome&sni=addons.mozilla.org&sid=%s&spx=%%2F&flow=xtls-rprx-vision#VPN-%s",
-		newUUID, os.Getenv("SERVER_IP"), os.Getenv("REALITY_PUBLIC_KEY"), os.Getenv("REALITY_SHORT_ID"), newUUID[:4],
+	serverIP := os.Getenv("SERVER_IP")
+	pubKey := os.Getenv("REALITY_PUBLIC_KEY")
+	shortID := os.Getenv("REALITY_SHORT_ID")
+
+	vlessTCP := fmt.Sprintf(
+		"vless://%s@%s:443?type=tcp&security=reality&pbk=%s&fp=chrome&sni=addons.mozilla.org&sid=%s&spx=%%2F&flow=xtls-rprx-vision#VPN-Standard-%s",
+		newUUID, serverIP, pubKey, shortID, newUUID[:4],
 	)
 
+	vlessGRPC := fmt.Sprintf(
+		"vless://%s@%s:8443?type=grpc&security=reality&pbk=%s&fp=chrome&sni=vk.com&sid=%s&serviceName=VpnService#VPN-Stealth-RU-%s",
+		newUUID, serverIP, pubKey, shortID, newUUID[:4],
+	)
+
+	clientURL := fmt.Sprintf("http://%s:8080/client/%s", serverIP, newUUID)
+
 	log.Printf("[KEY] Created key %s for email %s", newUUID[:8], email)
-	return c.JSON(CreateKeyResponse{VlessURL: vlessURL})
+	return c.JSON(CreateKeyResponse{
+		ClientURL: clientURL,
+		VlessTCP:  vlessTCP,
+		VlessGRPC: vlessGRPC,
+	})
 }
 
 func handleDeleteKey(c *fiber.Ctx) error {
-	targetUUID := c.Params("uuid")
+	reqUUID := c.Params("uuid")
+
+	// Find the user to get email for Xray removal
 	var user User
-	if err := db.Where("uuid = ?", targetUUID).First(&user).Error; err != nil {
-		return c.Status(404).SendString("user not found")
+	if err := db.Where("uuid = ?", reqUUID).First(&user).Error; err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "User not found"})
 	}
 
-	email := "user_" + user.UUID[:6]
+	// 1. Remove from DB
+	if err := db.Delete(&user).Error; err != nil {
+		return c.Status(500).SendString("db delete error")
+	}
+
+	// 2. Remove from Xray
+	email := "user_" + reqUUID[:6]
 	if err := xrayManager.RemoveUser(email); err != nil {
-		log.Printf("[WARN] gRPC remove failed for %s: %v", email, err)
+		log.Printf("[ERROR] Xray RemoveUser: %v", err)
 	}
 
-	user.Status = "disabled"
-	db.Save(&user)
-	log.Printf("[KEY] Deleted key %s", targetUUID[:8])
-	return c.JSON(fiber.Map{"status": "deleted", "uuid": targetUUID})
+	log.Printf("[KEY] Deleted key %s", reqUUID[:8])
+	return c.SendStatus(200)
+}
+
+func handleDeleteAllUsers(c *fiber.Ctx) error {
+	var users []User
+	if err := db.Find(&users).Error; err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch users"})
+	}
+
+	deletedCount := 0
+	for _, user := range users {
+		email := "user_" + user.UUID[:6]
+		// Remove from Xray
+		xrayManager.RemoveUser(email)
+		// Remove from DB
+		db.Delete(&user)
+		deletedCount++
+	}
+
+	log.Printf("[KEY] Bulk deleted %d users", deletedCount)
+	return c.JSON(fiber.Map{"message": fmt.Sprintf("Deleted %d users", deletedCount)})
 }
 
 func handleDownloadLogs(c *fiber.Ctx) error {
