@@ -48,6 +48,7 @@ func main() {
 	log.Println("[STARTUP] VPN Backend starting...")
 
 	// Database
+	var err error
 	db, err = gorm.Open(sqlite.Open("/app/data/vpn.db"), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("[STARTUP] Failed db: %v", err)
