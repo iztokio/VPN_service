@@ -68,13 +68,13 @@ export default function KeyCard({ token }: { token: string }) {
       ) : (
         <div className="flex flex-col items-center space-y-6 relative z-10 animate-in zoom-in-95 duration-300">
           <div className="bg-white p-4 rounded-2xl shadow-lg ring-1 ring-white/10">
-            <QRCodeSVG value={vlessUrl} size={200} level="M" includeMargin={false} />
+            <QRCodeSVG value={clientUrl} size={200} level="M" includeMargin={false} />
           </div>
 
           <div className="w-full space-y-3">
             <div className="bg-black/40 border border-white/5 rounded-xl p-3 flex items-center justify-between">
               <span className="text-xs text-slate-400 font-mono truncate mr-4 selection:bg-indigo-500/30">
-                {vlessUrl.slice(0, 32)}...
+                {clientUrl.slice(0, 32)}...
               </span>
               <button
                 onClick={copyToClipboard}
@@ -90,7 +90,7 @@ export default function KeyCard({ token }: { token: string }) {
           </div>
 
           <button
-            onClick={() => setVlessUrl(null)}
+            onClick={() => setClientUrl(null)}
             className="w-full text-sm text-slate-500 hover:text-slate-300 transition-colors py-2 font-medium"
           >
             Generate another
