@@ -1,0 +1,64 @@
+---
+- name: Deploy Tier-1 Xray VPN Node
+  hosts: vpn_nodes
+  become: yes
+  vars:
+    project_repo: "https://github.com/iztokio/VPN_service.git"
+    project_dir: "/root/vpn_product"
+    
+  tasks:
+    - name: Update apt cache and install basic packages
+      apt:
+        name:
+          - git
+          - curl
+          - apt-transport-https
+          - ca-certificates
+          - software-properties-common
+          - uuid-runtime
+        state: present
+        update_cache: yes
+
+    - name: Install Docker
+      shell: curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
+      args:
+        creates: /usr/bin/docker
+
+    - name: Clone VPN Project Repository
+      git:
+        repo: "{{ project_repo }}"
+        dest: "{{ project_dir }}"
+        version: main
+        force: yes
+
+    - name: Generate unique Xray Reality Keys
+      shell: docker run --rm teddysun/xray:latest xray x25519
+      register: xray_keys_raw
+      failed_when: xray_keys_raw.rc != 0
+      changed_when: false
+
+    - name: Parse Private Key
+      set_fact:
+        reality_private_key: "{{ xray_keys_raw.stdout | regex_search('Private key: (.*)', '\\1') | first }}"
+
+    - name: Parse Public Key
+      set_fact:
+        reality_public_key: "{{ xray_keys_raw.stdout | regex_search('Public key: (.*)', '\\1') | first }}"
+
+    - name: Generate Reality Short ID
+      shell: openssl rand -hex 8
+      register: short_id_raw
+
+    - name: Create or update .env file
+      template:
+        src: env.j2
+        dest: "{{ project_dir }}/.env"
+
+    - name: Start VPN Services
+      shell: docker compose up -d --build
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Output Connection Details
+      debug:
+        msg: "Deployment complete! Public Key: {{ reality_public_key }}, Short ID: {{ short_id_raw.stdout }}"
